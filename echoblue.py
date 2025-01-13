@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import os
+import subprocess
 from bleak import BleakScanner
 
 # Function to load known device addresses from a file
@@ -19,8 +20,33 @@ def device_found(device, advertisement_data):
         send_alert(device.address, device.name)
 
 def send_alert(device_address, device_name):
-    # Alert logic here
+    # Implement your alerting logic here (e.g., email, SMS, etc.)
     print(f"Alert: Device {device_name} ({device_address}) is in range!")
+
+# Function to get list of valid Bluetooth adapters using hciconfig
+def get_bluetooth_adapters():
+    try:
+        result = subprocess.run(['hciconfig'], capture_output=True, text=True, check=True)
+        adapters = []
+        for line in result.stdout.splitlines():
+            if line and '\t' in line and not line.startswith('\t'):  # Adapter lines contain tabs and do not start with a tab
+                adapter = line.split(':')[0]
+                adapters.append(adapter)
+        print(f"Valid Bluetooth adapters found: {adapters}")
+        return adapters
+    except subprocess.CalledProcessError:
+        print("Error: Failed to execute hciconfig.")
+        return []
+
+async def scan_with_adapter(adapter, interval):
+    scanner = BleakScanner(adapter=adapter)
+    scanner.register_detection_callback(device_found)
+    await scanner.start()
+    while True:
+        await asyncio.sleep(interval)  # Use the specified interval
+        discovered_devices.clear()  # Clear the discovered devices set for the next scan
+        await scanner.stop()
+        await scanner.start()
 
 async def main(args):
     global known_devices, discovered_devices
@@ -30,14 +56,13 @@ async def main(args):
         print("No known devices loaded. Exiting.")
         return
 
-    scanner = BleakScanner()
-    scanner.register_detection_callback(device_found)
-    await scanner.start()
-    while True:
-        await asyncio.sleep(args.interval)  # Use the specified interval
-        discovered_devices.clear()  # Clear the discovered devices set for the next scan
-        await scanner.stop()
-        await scanner.start()
+    adapters = get_bluetooth_adapters()
+    if not adapters:
+        print("No Bluetooth adapters found. Exiting.")
+        return
+
+    tasks = [scan_with_adapter(adapter, args.interval) for adapter in adapters]
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bluetooth device scanner")
