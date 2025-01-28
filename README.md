@@ -4,31 +4,32 @@ A Python-based Bluetooth scanner that monitors for specific devices and sends al
 
 ## Features
 
-- Scans for specific Bluetooth devices using their MAC addresses
-- Distributes scanning workload across multiple Bluetooth adapters
-- Sends alerts when known devices are detected
-- Configurable scan intervals
-- Simple device management through a text file
+- **Scans for specific Bluetooth devices** using their MAC addresses
+- **Distributes scanning workload** across multiple Bluetooth adapters
+- **Sends alerts** when known devices are detected
+- **Configurable scan intervals** for both Classic Bluetooth and BLE
+- **Simple device management** through a text file
+- **Supports both Classic Bluetooth and BLE scanning**
 
 ## Prerequisites
 
 - Python 3.7 or higher
 - Linux, macOS, or Windows operating system
-- Bluetooth adapter with BLE support
+- Bluetooth adapter with support for Classic Bluetooth or BLE
 - Required Python packages:
   - bleak
   - asyncio
 
 ## Installation
 
-1. Clone the repository or download the source code.
+1. **Clone the repository** or download the source code.
 
-2. Install the required dependencies:
+2. **Install the required dependencies:**
 ```bash
 pip install bleak asyncio
 ```
 
-3. Create a text file containing the MAC addresses of devices you want to monitor, one per line:
+3. **Create a text file** containing the MAC addresses of devices you want to monitor, one per line:
 ```text
 XX:XX:XX:XX:XX:XX
 YY:YY:YY:YY:YY:YY
@@ -38,12 +39,15 @@ YY:YY:YY:YY:YY:YY
 
 Run the scanner with the following command:
 ```bash
-python scanner.py -f devices.txt -i 30
+python echoblue.py -f devices.txt -c --classic-interval 10
 ```
 
 **Command Arguments:**
 - `-f, --file`: Path to the file containing device MAC addresses (required)
-- `-i, --interval`: Scan interval in seconds (optional, default: 30)
+- `-c, --classic`: Use Classic Bluetooth mode (l2ping)
+- `-b, --btle`: Use BLE mode
+- `--classic-interval`: Scan interval in seconds for Classic Bluetooth (optional, default: 30)
+- `--ble-interval`: Scan interval in seconds for BLE (optional, default: 30)
 
 ## Configuration
 
@@ -52,13 +56,21 @@ python scanner.py -f devices.txt -i 30
 - Addresses should be in the format `XX:XX:XX:XX:XX:XX`
 - Empty lines and whitespace are automatically ignored
 
+```
+77:0E:FD:98:10:30
+89:57:5F:D0:F4:06
+9B:F8:76:6A:1E:FC
+B1:69:D1:E4:06:FB
+```
 ## How It Works
 
-1. The program loads a list of known device addresses from the specified file
-2. It initializes the BLE scanner using the Bleak library
-3. When a device is discovered, it checks if the device's address matches any in the known devices list
-4. If a match is found, an alert is triggered
-5. The scanner clears its cache and restarts at the specified interval
+1. **Loads known device addresses** from the specified file
+2. **Detects available Bluetooth adapters** using `hciconfig`
+3. **Initializes the scanner** for either Classic Bluetooth or BLE based on user selection
+4. **Scans for devices** at the specified interval:
+   - For **BLE**, it uses the Bleak library to scan and alert when a known device is discovered.
+   - For **Classic Bluetooth**, it uses `l2ping` to ping known devices and alert if they respond.
+5. **Clears the cache** before each scan to ensure re-alerting if desired.
 
 ## Customization
 
@@ -75,6 +87,7 @@ The program includes basic error handling for:
 - Missing or invalid device list files
 - Empty device lists
 - Scanner initialization failures
+- Bluetooth adapter detection issues
 
 ## License
 
