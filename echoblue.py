@@ -48,27 +48,46 @@ async def scan_with_adapter(adapter, interval):
         await scanner.stop()
         await scanner.start()
 
+def classic_ping_scan(devices, ping_count=3):
+    """Scan Classic devices using l2ping"""
+    for mac in devices:
+        try:
+            result = subprocess.run(
+                ['sudo', 'l2ping', '-c', str(ping_count), mac],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if any("bytes from" in line for line in result.stdout.split('\n')):
+                print(f"Classic device active: {mac}")
+                send_alert(mac, "Classic Device")
+            else:
+                print(f"Classic device inactive: {mac}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error pinging {mac}: {str(e)}")
+
 async def main(args):
     global known_devices, discovered_devices
     known_devices = load_known_devices(args.file)
-    discovered_devices = set()
-    if not known_devices:
-        print("No known devices loaded. Exiting.")
-        return
-
-    adapters = get_bluetooth_adapters()
-    if not adapters:
-        print("No Bluetooth adapters found. Exiting.")
-        return
-
-    tasks = [scan_with_adapter(adapter, args.interval) for adapter in adapters]
-    await asyncio.gather(*tasks)
+    
+    if args.classic:
+        # Classic Bluetooth mode
+        classic_ping_scan(known_devices)
+    else:
+        # BLE mode
+        discovered_devices = set()
+        adapters = get_bluetooth_adapters()
+        tasks = [scan_with_adapter(adapter, args.interval) for adapter in adapters]
+        await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bluetooth device scanner")
-    parser.add_argument('-f', '--file', type=str, required=True, help='Path to the file with known device addresses')
-    parser.add_argument('-i', '--interval', type=int, default=30, help='Sleep interval between scans (in seconds)')
+    parser.add_argument('-f', '--file', type=str, required=True,
+                        help='Path to file with known device addresses')
+    parser.add_argument('-i', '--interval', type=int, default=30,
+                        help='Scan interval in seconds (BLE mode only)')
+    parser.add_argument('-c', '--classic', action='store_true',
+                        help='Use Classic Bluetooth mode with l2ping')
     args = parser.parse_args()
 
     asyncio.run(main(args))
-
