@@ -1,4 +1,4 @@
-# ECHOBLUE
+# Blue Echo (ECHOBLUE)
 
 A Python-based Bluetooth scanner that monitors for specific devices and sends alerts when they come into range. This tool efficiently distributes workload across available Bluetooth hardware and continuously scans for devices listed in a configuration file.
 
