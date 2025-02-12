@@ -1,6 +1,6 @@
 # Blue Echo (ECHOBLUE)
 
-A Python-based Bluetooth scanner that monitors for specific devices and sends alerts when they come into range. This tool efficiently distributes workload across available Bluetooth hardware and continuously scans for devices listed in a configuration file.
+A Python-based Bluetooth scanner that monitors for specific devices and sends alerts when they come into range. This tool efficiently distributes the workload across available Bluetooth hardware and continuously scans for devices listed in a configuration file.
 
 ## Features
 
@@ -13,8 +13,8 @@ A Python-based Bluetooth scanner that monitors for specific devices and sends al
 
 ## Prerequisites
 
-- Python 3.7 or higher
-- Linux, macOS, or Windows operating system
+- Python 3.11 or higher
+- Linux or macOS operating system
 - Bluetooth adapter with support for Classic Bluetooth or BLE
 - Required Python packages:
   - bleak
@@ -22,18 +22,38 @@ A Python-based Bluetooth scanner that monitors for specific devices and sends al
 
 ## Installation
 
+It's highly recommended to create a virtual environment to manage the project's dependencies and avoid conflicts with other Python projects on your system.
+
 1. **Clone the repository** or download the source code.
 
-2. **Install the required dependencies:**
-```bash
-pip install bleak asyncio
-```
+2. **Create a virtual environment:**
+   ```bash
+   python3 -m venv venv 
+   ```
+   This command creates a virtual environment named `venv` in your project directory.
 
-3. **Create a text file** containing the MAC addresses of devices you want to monitor, one per line:
-```text
-XX:XX:XX:XX:XX:XX
-YY:YY:YY:YY:YY:YY
-```
+3. **Activate the virtual environment:**
+
+   ```bash
+   source venv/bin/activate
+   ```
+
+4. **Install the required dependencies:**
+   ```bash
+   pip install bleak asyncio
+   ```
+
+5. **Create a text file** containing the MAC addresses of devices you want to monitor, one per line:
+   ```text
+   XX:XX:XX:XX:XX:XX
+   YY:YY:YY:YY:YY:YY
+   ```
+
+6. **(Optional) Deactivate the virtual environment:**
+   When you're finished working on the project, you can deactivate the virtual environment with the following command:
+   ```bash
+   deactivate
+   ```
 
 ## Usage
 
