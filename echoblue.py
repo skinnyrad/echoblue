@@ -43,7 +43,7 @@ async def scan_with_adapter(adapter, interval):
     try:
         while True:
             await asyncio.sleep(interval)
-            # Clear discovered devices for this cycle while keeping the overall record
+            # Clear discovered devices for this cycle while keeping the overall record.
             discovered_devices.clear()
             await scanner.stop()
             await scanner.start()
@@ -92,20 +92,26 @@ async def main(args):
         return
 
     adapters = get_bluetooth_adapters()
+
+    # Filter out excluded adapters if any were specified.
+    if args.exclude:
+        for ex in args.exclude:
+            if ex not in adapters:
+                print(f"Warning: Interface {ex} specified to ignore but not found.")
+        adapters = [adapter for adapter in adapters if adapter not in args.exclude]
+
     if not adapters:
-        print("No Bluetooth adapters found. Exiting.")
+        print("No Bluetooth adapters available after filtering. Exiting.")
         return
 
     if args.classic:
         tasks = []
         num_adapters = len(adapters)
-        # Distribute the known devices evenly across the adapters.
         devices_per_adapter = [[] for _ in adapters]
         for i, mac in enumerate(known_devices):
             adapter_index = i % num_adapters
             devices_per_adapter[adapter_index].append(mac)
         
-        # Create scanning tasks for each adapter with assigned devices.
         for adapter, devices in zip(adapters, devices_per_adapter):
             if devices:
                 print(f"[{adapter}] Monitoring {len(devices)} devices: {', '.join(devices)}")
@@ -115,7 +121,6 @@ async def main(args):
                     )
                 )
     else:
-        # BLE mode: one task per adapter.
         tasks = [scan_with_adapter(adapter, args.ble_interval) for adapter in adapters]
 
     try:
@@ -149,7 +154,9 @@ if __name__ == "__main__":
                         help='Scan interval in seconds (Classic mode)')
     parser.add_argument('--ble-interval', type=int, default=30,
                         help='Scan interval in seconds (BLE mode)')
-
+    parser.add_argument('-x', '--exclude', type=str, nargs='*', default=[],
+                        help='Interface(s) to exclude (e.g., -x hci0 hci2)')
+    
     args = parser.parse_args()
     try:
         asyncio.run(main(args))
