@@ -1,28 +1,30 @@
 # Blue Echo (ECHOBLUE)
 
-A Python-based Bluetooth scanner that monitors for specific devices and sends alerts when they come into range. This tool efficiently distributes the workload across available Bluetooth hardware and continuously scans for devices listed in a configuration file.
+Blue Echo is a Python-based Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range. The tool efficiently distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using l2ping) and BLE scanning (using the Bleak library).
 
 ## Features
 
-- **Scans for specific Bluetooth devices** using their MAC addresses
-- **Distributes scanning workload** across multiple Bluetooth adapters
-- **Sends alerts** when known devices are detected
-- **Configurable scan intervals** for both Classic Bluetooth and BLE
-- **Simple device management** through a text file
-- **Supports both Classic Bluetooth and BLE scanning**
+- **Monitors specific Bluetooth devices** by reading MAC addresses from a configuration file  
+- **Supports both BLE and Classic Bluetooth modes**: Use BLE scanning with Bleak or Classic scanning via l2ping  
+- **Workload distribution for Classic mode**: Evenly distributes device pings across available Bluetooth adapters  
+- **Configurable scanning intervals**: Set separate intervals for BLE (`--ble-interval`) and Classic (`--classic-interval`) modes  
+- **Adapter detection and exclusion**: Automatically detects available Bluetooth adapters using `hciconfig` and allows excluding selected interfaces  
+- **Persistent device tracking**: Maintains a session record of all discovered devices while resetting per-cycle alerts  
+- **Graceful shutdown**: Handles interruptions and outputs a summary of all detected devices
 
 ## Prerequisites
 
-- Python 3.11 or higher
+- Python 3.10 or higher
 - Linux or macOS operating system
-- Bluetooth adapter with support for Classic Bluetooth or BLE
-- Required Python packages:
-  - bleak
-  - asyncio
+- Bluetooth adapter(s) supporting Classic Bluetooth or BLE
+- System utility `hciconfig` for adapter detection
+- Sudo privileges for Classic mode (running `l2ping`)
+- Required Python package:
+  - bleak  
+
+*(Note: asyncio is included in the Python standard library)*
 
 ## Installation
-
-It's highly recommended to create a virtual environment to manage the project's dependencies and avoid conflicts with other Python projects on your system.
 
 1. **Clone the repository** or download the source code.
 
@@ -30,85 +32,94 @@ It's highly recommended to create a virtual environment to manage the project's 
    ```bash
    python3 -m venv venv 
    ```
-   This command creates a virtual environment named `venv` in your project directory.
+   This creates a virtual environment named `venv` in your project directory.
 
 3. **Activate the virtual environment:**
-
    ```bash
    source venv/bin/activate
    ```
 
-4. **Install the required dependencies:**
+4. **Install the required dependency:**
    ```bash
-   pip install bleak asyncio
+   pip install bleak
    ```
 
-5. **Create a text file** containing the MAC addresses of devices you want to monitor, one per line:
+5. **Prepare a configuration file** with the MAC addresses of devices to monitor (one per line):
    ```text
    XX:XX:XX:XX:XX:XX
    YY:YY:YY:YY:YY:YY
    ```
 
-6. **(Optional) Deactivate the virtual environment:**
-   When you're finished working on the project, you can deactivate the virtual environment with the following command:
+**(Optional) Deactivate the virtual environment when you are finished running the tool:**
    ```bash
    deactivate
    ```
 
 ## Usage
 
-Run the scanner with the following command:
+Run the script with your desired options. For example:
+
 ```bash
-python echoblue.py -f devices.txt -c --classic-interval 10
+python echoblue.py -f devices.txt -c --classic-interval 10 --num-packets 3
 ```
 
-**Command Arguments:**
-- `-f, --file`: Path to the file containing device MAC addresses (required)
-- `-c, --classic`: Use Classic Bluetooth mode (l2ping)
-- `-b, --btle`: Use BLE mode
-- `--classic-interval`: Scan interval in seconds for Classic Bluetooth (optional, default: 30)
-- `--ble-interval`: Scan interval in seconds for BLE (optional, default: 30)
+**Command Line Arguments:**
+
+- `-f, --file`: Path to the configuration file containing device MAC addresses (required)  
+- `-c, --classic`: Use Classic Bluetooth mode (l2ping)  
+- `-b, --btle`: Use BLE mode  
+- `--classic-interval`: Scan interval in seconds for Classic mode (default: 30)  
+- `--ble-interval`: Scan interval in seconds for BLE mode (default: 30)  
+- `-n, --num-packets`: Number of l2ping packets to send in Classic mode (default: 3)  
+- `-x, --exclude`: List of Bluetooth adapter interfaces to ignore (e.g., `-x hci0 hci2`)
 
 ## Configuration
 
 **Device List File Format:**
-- Each line should contain a single MAC address
-- Addresses should be in the format `XX:XX:XX:XX:XX:XX`
-- Empty lines and whitespace are automatically ignored
 
+- Each line should contain a single MAC address in the format `XX:XX:XX:XX:XX:XX`
+- Lines that are empty or consist of only whitespace are automatically ignored
+
+Example file content:
 ```
 77:0E:FD:98:10:30
 89:57:5F:D0:F4:06
 9B:F8:76:6A:1E:FC
 B1:69:D1:E4:06:FB
 ```
+
 ## How It Works
 
-1. **Loads known device addresses** from the specified file
-2. **Detects available Bluetooth adapters** using `hciconfig`
-3. **Initializes the scanner** for either Classic Bluetooth or BLE based on user selection
-4. **Scans for devices** at the specified interval:
-   - For **BLE**, it uses the Bleak library to scan and alert when a known device is discovered.
-   - For **Classic Bluetooth**, it uses `l2ping` to ping known devices and alert if they respond.
-5. **Clears the cache** before each scan to ensure re-alerting if desired.
+**Device Loading:** Reads known device MAC addresses from the specified configuration file.
+
+**Adapter Detection:** Uses the `hciconfig` utility to list available Bluetooth adapters; adapters can be excluded using the `-x/--exclude` flag.
+
+**Scanner Initialization:**  
+  - **BLE Mode:** The Bleak library is used for asynchronous scanning. The scanner is restarted in each cycle—clearing temporary state—to ensure devices are re-checked.  
+  - **Classic Mode:** Known devices are distributed evenly across adapters and pinged using `l2ping`. Sudo privileges are required, and response verification triggers alerts.
+
+**Alert & Logging:** When a known device is detected, the code prints an alert message and maintains an overall record of all discovered devices throughout the session.
+
+**Graceful Shutdown:** Handles keyboard interrupts by canceling scanning tasks and then outputs a summary of devices seen during the run.
 
 ## Customization
 
-To customize the alert system, modify the `send_alert` function in the code:
+To alter how alerts are provided, modify the `send_alert` function in the source code:
 ```python
 def send_alert(device_address, device_name):
-    # Add your custom alert logic here
+    # Customize alert logic here (e.g., email, SMS, or custom logging)
     print(f"Alert: Device {device_name} ({device_address}) is in range!")
 ```
 
 ## Error Handling
 
-The program includes basic error handling for:
-- Missing or invalid device list files
+The tool includes error handling for the following:
+- Missing or invalid configuration files
 - Empty device lists
-- Scanner initialization failures
-- Bluetooth adapter detection issues
+- Bluetooth adapter detection issues (using output from `hciconfig`)
+- Subprocess failures or timeouts (especially when pinging devices in Classic mode)
+- Graceful termination on user interruption
 
 ## License
 
-This project is open-source and available under the MIT License.
+This project is open-source and distributed under the MIT License.
