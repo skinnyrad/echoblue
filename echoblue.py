@@ -1,17 +1,48 @@
+"""
+Blue Echo: A Bluetooth Device Scanner
+
+This module provides functionality to scan for Bluetooth devices using either BLE (via Bleak)
+or Classic Bluetooth (via l2ping). It reads a configuration file for known device MAC addresses,
+detects available Bluetooth adapters using the `hciconfig` command, and continuously scans for
+devices in range. When a known device is found, an alert is printed.
+"""
+
 import asyncio
 import argparse
 import os
 import subprocess
 from bleak import BleakScanner
 
+
 def load_known_devices(file_path):
+    """
+    Load known Bluetooth device addresses from a text file.
+
+    Args:
+        file_path (str): Path to the file containing device MAC addresses, one per line.
+
+    Returns:
+        list: A list of device MAC addresses (str). If the file does not exist, returns an empty list.
+    """
     if not os.path.isfile(file_path):
         print(f"Error: File '{file_path}' does not exist.")
         return []
     with open(file_path, 'r') as file:
         return [line.strip() for line in file if line.strip()]
 
+
 def device_found(device, advertisement_data):
+    """
+    Callback function to handle Bluetooth device detection during BLE scanning.
+
+    This function is invoked each time the BleakScanner detects a device. If the device's MAC address
+    is in the list of known devices and hasn't been alerted in the current scan cycle, it adds the device
+    to the discovered list, prints a message, and sends an alert.
+
+    Args:
+        device: A Bleak device object, which includes attributes such as 'address' and 'name'.
+        advertisement_data: Advertising data for the device (unused in this implementation).
+    """
     global discovered_devices, all_seen_devices
     if device.address in known_devices and device.address not in discovered_devices:
         discovered_devices.add(device.address)
@@ -19,10 +50,29 @@ def device_found(device, advertisement_data):
         print(f"Device found: {device.name} ({device.address})")
         send_alert(device.address, device.name)
 
+
 def send_alert(device_address, device_name):
+    """
+    Send an alert when a known device is detected.
+
+    Currently, this function simply prints an alert message. It can be modified to integrate with
+    external notification systems such as email, SMS, or logging services.
+
+    Args:
+        device_address (str): The MAC address of the detected device.
+        device_name (str): The human-readable name of the detected device.
+    """
     print(f"Alert: Device {device_name} ({device_address}) is in range!")
 
+
 def get_bluetooth_adapters():
+    """
+    Detect available Bluetooth adapters using the `hciconfig` system command.
+
+    Returns:
+        list: A list of detected Bluetooth adapter names (e.g., 'hci0', 'hci1').
+        If the command fails, an empty list is returned.
+    """
     try:
         result = subprocess.run(['hciconfig'], capture_output=True, text=True, check=True)
         adapters = []
@@ -36,7 +86,22 @@ def get_bluetooth_adapters():
         print("Error: Failed to execute hciconfig.")
         return []
 
+
 async def scan_with_adapter(adapter, interval):
+    """
+    Asynchronously scan for BLE devices using a specific Bluetooth adapter.
+
+    This function creates a BleakScanner for the given adapter, registers the detection callback,
+    and continuously scans for devices. At the end of each interval, it clears the temporary record
+    of discovered devices while preserving the overall list of devices detected in the session.
+
+    Args:
+        adapter (str): The Bluetooth adapter to use (e.g., 'hci0').
+        interval (int): The time interval in seconds between scanning cycles.
+
+    Raises:
+        asyncio.CancelledError: If the scanning task is cancelled.
+    """
     scanner = BleakScanner(adapter=adapter)
     scanner.register_detection_callback(device_found)
     await scanner.start()
@@ -51,7 +116,23 @@ async def scan_with_adapter(adapter, interval):
         await scanner.stop()
         raise
 
+
 async def ping_device(adapter, mac, ping_count=3):
+    """
+    Asynchronously ping a Classic Bluetooth device using a specified adapter.
+
+    Uses the 'l2ping' command (with sudo) to ping the specified MAC address. If a valid response
+    is detected in the command output, an alert is triggered and the device is recorded; otherwise,
+    the device is reported inactive.
+
+    Args:
+        adapter (str): The Bluetooth adapter to use for pinging (e.g., 'hci0').
+        mac (str): MAC address of the device to be pinged.
+        ping_count (int, optional): Number of ping packets to send. Defaults to 3.
+
+    Notes:
+        Requires sudo privileges and the availability of the 'l2ping' command.
+    """
     global all_seen_devices
     try:
         process = await asyncio.create_subprocess_exec(
@@ -71,7 +152,23 @@ async def ping_device(adapter, mac, ping_count=3):
     except subprocess.CalledProcessError as e:
         print(f"[{adapter}] Error pinging {mac}: {str(e)}")
 
+
 async def classic_scan_with_adapter(adapter, devices, interval, ping_count=3):
+    """
+    Asynchronously scan for Classic Bluetooth devices by pinging known devices on a provided adapter.
+
+    The function continuously pings each device in the list and waits for a specified interval between
+    each scan cycle.
+
+    Args:
+        adapter (str): The Bluetooth adapter to use (e.g., 'hci0').
+        devices (list): A list of device MAC addresses to ping.
+        interval (int): Time in seconds to wait between scan cycles.
+        ping_count (int, optional): Number of ping packets to send for each device. Defaults to 3.
+
+    Raises:
+        asyncio.CancelledError: If the scanning task is cancelled.
+    """
     try:
         while True:
             print(f"[{adapter}] Starting scan cycle for {len(devices)} devices")
@@ -81,7 +178,20 @@ async def classic_scan_with_adapter(adapter, devices, interval, ping_count=3):
     except asyncio.CancelledError:
         raise
 
+
 async def main(args):
+    """
+    Main asynchronous function to initialize and run the Bluetooth scanning process.
+
+    Loads known device addresses from the provided configuration file, detects available Bluetooth adapters,
+    and starts asynchronous scanning tasks based on the selected mode (Classic or BLE). In Classic mode,
+    devices are distributed evenly across adapters and pinged, while in BLE mode, scanning is handled by Bleak.
+    On keyboard interrupt, scanning tasks are cancelled gracefully and a summary of detected devices is output.
+
+    Args:
+        args: Command-line arguments parsed by argparse, including options for file path, scan intervals,
+              mode selection, packet count, and adapter exclusion.
+    """
     global known_devices, discovered_devices, all_seen_devices
     known_devices = load_known_devices(args.file)
     discovered_devices = set()  # This set is cleared every scan cycle.
@@ -108,6 +218,7 @@ async def main(args):
         tasks = []
         num_adapters = len(adapters)
         devices_per_adapter = [[] for _ in adapters]
+        # Distribute known devices evenly across available adapters
         for i, mac in enumerate(known_devices):
             adapter_index = i % num_adapters
             devices_per_adapter[adapter_index].append(mac)
@@ -138,6 +249,7 @@ async def main(args):
                 print(device)
         else:
             print("No devices from target file were seen.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bluetooth device scanner")
