@@ -19,8 +19,10 @@ Blue Echo is a Python-based Bluetooth device scanner that monitors for specific 
 - Bluetooth adapter(s) supporting Classic Bluetooth or BLE
 - System utility `hciconfig` for adapter detection
 - Sudo privileges for Classic mode (running `l2ping`)
-- Required Python package:
-  - bleak  
+- Required Python packages:
+  - bleak
+  - asyncio
+  - aiofiles
 
 *(Note: asyncio is included in the Python standard library)*
 
