@@ -41,7 +41,7 @@ Blue Echo is a Python-based Bluetooth device scanner that monitors for specific 
 
 4. **Install the required dependency:**
    ```bash
-   pip install bleak
+   pip install bleak aiofiles
    ```
 
 5. **Prepare a configuration file** with the MAC addresses of devices to monitor (one per line):
