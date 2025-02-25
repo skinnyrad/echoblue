@@ -103,19 +103,19 @@ async def scan_with_adapter(adapter, interval):
     Raises:
         asyncio.CancelledError: If the scanning task is cancelled.
     """
-    scanner = BleakScanner(adapter=adapter)
-    scanner.register_detection_callback(device_found)
-    await scanner.start()
+    scanner = BleakScanner(
+        adapter=adapter,
+        detection_callback=device_found  # Modern callback assignment
+    )
     try:
-        while True:
-            await asyncio.sleep(interval)
-            # Clear discovered devices for this cycle while keeping the overall record.
-            discovered_devices.clear()
-            await scanner.stop()
-            await scanner.start()
+        async with scanner:  # Context manager handles start/stop
+            while True:
+                await asyncio.sleep(interval)
+                discovered_devices.clear()
     except asyncio.CancelledError:
-        await scanner.stop()
+        await scanner.stop()  # Graceful shutdown
         raise
+
 
 async def ping_device(adapter, mac, ping_count=3):
     """
