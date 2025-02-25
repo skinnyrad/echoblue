@@ -253,7 +253,7 @@ async def fuzz_uap(adapter, target_address, output_file, timeout):
                 print(f"[{adapter}] No response: {target_address}")
                 
         except asyncio.TimeoutError:
-            print(f"[{adapter}] Timeout on {target_address}")
+            print(f"[{adapter}] No response: {target_address}")
             try:
                 process.terminate()
                 await process.wait()
