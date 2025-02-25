@@ -1,5 +1,4 @@
-"""
-Blue Echo: A Bluetooth Device Scanner
+"""Blue Echo: A Bluetooth Device Scanner
 
 This module provides functionality to scan for Bluetooth devices using either BLE (via Bleak)
 or Classic Bluetooth (via l2ping). It reads a configuration file for known device MAC addresses,
@@ -18,6 +17,11 @@ import aiofiles
 known_devices = set()
 discovered_devices = set()
 all_seen_devices = set()
+
+# New globals for UAP fuzzing progress
+uap_attempt_count = 0
+uap_found_count = 0
+total_uap_attempts = 0
 
 def load_known_devices(file_path):
     """
@@ -116,7 +120,6 @@ async def scan_with_adapter(adapter, interval):
     except asyncio.CancelledError:
         await scanner.stop()  # Graceful shutdown
         raise
-
 
 async def ping_device(adapter, mac, ping_count=3):
     """
@@ -235,6 +238,12 @@ async def fuzz_uap(adapter, target_address, output_file, timeout):
     - asyncio.TimeoutError: If the ping operation times out.
     - subprocess.CalledProcessError: If there's an error executing the `l2ping` command.
     """
+    global uap_attempt_count, uap_found_count, total_uap_attempts
+
+    # Count this attempt early and capture its value
+    uap_attempt_count += 1
+    current_attempt = uap_attempt_count
+
     try:
         process = await asyncio.create_subprocess_exec(
             'sudo', 'l2ping', '-i', adapter, '-c', '3', target_address,
@@ -243,27 +252,30 @@ async def fuzz_uap(adapter, target_address, output_file, timeout):
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
-            
             if b"bytes from" in stdout:
-                print(f"Found {target_address}. Saving to output file...")
+                uap_found_count += 1
+                print(f"[{adapter}] Found {target_address}. Saving to output file... "
+                      f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
                 async with aiofiles.open(output_file, 'a') as f:
                     await f.write(f"{target_address}\n")
                 return target_address
             else:
-                print(f"[{adapter}] No response: {target_address}")
-                
+                print(f"[{adapter}] No response: {target_address} "
+                      f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
         except asyncio.TimeoutError:
-            print(f"[{adapter}] No response: {target_address}")
+            print(f"[{adapter}] Timeout on {target_address} "
+                  f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
             try:
                 process.terminate()
                 await process.wait()
             except ProcessLookupError:
                 pass
         except Exception as e:
-            print(f"[{adapter}] Error: {str(e)}")
-            
+            print(f"[{adapter}] Error: {str(e)} "
+                  f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
     except Exception as e:
-        print(f"[{adapter}] Fatal error: {str(e)}")
+        print(f"[{adapter}] Fatal error: {str(e)} "
+              f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
     
     return None
 
@@ -296,38 +308,39 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
     - FileNotFoundError**: If the LAP file does not exist.
     - ValueError**: If an invalid LAP format is encountered.
     """
+    global total_uap_attempts
     with open(lap_file, 'r') as f:
         laps = [line.strip() for line in f if line.strip()]
 
+    # Filter out invalid LAPs first
+    valid_laps = []
     for lap in laps:
         try:
-            # Validate LAP through generation
+            # Validate that the LAP can generate at least one address
             next(generate_uap_combinations(lap))
+            valid_laps.append(lap)
         except ValueError as e:
             print(f"Skipping invalid LAP: {lap} - {str(e)}")
-            continue
-            
+
+    # Each valid LAP produces 256 combinations
+    total_uap_attempts = len(valid_laps) * 256
+
+    for lap in valid_laps:
         uap_gen = generate_uap_combinations(lap)
-        
-        # Create iterator pool
-        targets = (t for t in uap_gen)
-        
-        # Process in batches of 4 per adapter
+        # Process in batches (4 per adapter)
         batch_size = 4 * len(adapters)
-        
         while True:
-            batch = [next(targets, None) for _ in range(batch_size)]
+            batch = [next(uap_gen, None) for _ in range(batch_size)]
             batch = [t for t in batch if t is not None]
-            
             if not batch:
                 break
-                
+
             tasks = []
             for target in batch:
+                # Distribute tasks round-robin across adapters.
                 adapter = adapters[batch.index(target) % len(adapters)]
                 tasks.append(fuzz_uap(adapter, target, output_file, timeout))
-            
-            # Allow individual failures
+            # Run the tasks concurrently, allowing individual failures
             await asyncio.gather(*tasks, return_exceptions=True)
 
 async def main(args):
