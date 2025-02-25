@@ -254,30 +254,22 @@ async def fuzz_uap(adapter, target_address, output_file, timeout):
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
             if b"bytes from" in stdout:
                 uap_found_count += 1
-                print(f"[{adapter}] Found {target_address}. Saving to output file... "
-                      f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
                 async with aiofiles.open(output_file, 'a') as f:
                     await f.write(f"{target_address}\n")
-                return target_address
+                return current_attempt, f"[{adapter}] Found {target_address}. Saving to output file... " \
+                       f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)"
             else:
-                print(f"[{adapter}] No response: {target_address} "
-                      f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
+                return current_attempt, f"[{adapter}] No response: {target_address} " \
+                       f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)"
         except asyncio.TimeoutError:
-            print(f"[{adapter}] Timeout on {target_address} "
-                  f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
-            try:
-                process.terminate()
-                await process.wait()
-            except ProcessLookupError:
-                pass
+            return current_attempt, f"[{adapter}] Timeout on {target_address} " \
+                   f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)"
         except Exception as e:
-            print(f"[{adapter}] Error: {str(e)} "
-                  f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
+            return current_attempt, f"[{adapter}] Error: {str(e)} " \
+                   f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)"
     except Exception as e:
-        print(f"[{adapter}] Fatal error: {str(e)} "
-              f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)")
-    
-    return None
+        return current_attempt, f"[{adapter}] Fatal error: {str(e)} " \
+               f"({current_attempt} of {total_uap_attempts} laps completed; {uap_found_count} total found)"
 
 async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
     """
@@ -308,6 +300,7 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
     - FileNotFoundError**: If the LAP file does not exist.
     - ValueError**: If an invalid LAP format is encountered.
     """
+    print("Initializing UAP Fuzz...")
     global total_uap_attempts
     with open(lap_file, 'r') as f:
         laps = [line.strip() for line in f if line.strip()]
@@ -341,7 +334,16 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
                 adapter = adapters[batch.index(target) % len(adapters)]
                 tasks.append(fuzz_uap(adapter, target, output_file, timeout))
             # Run the tasks concurrently, allowing individual failures
-            await asyncio.gather(*tasks, return_exceptions=True)
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Sort the results based on sequence numbers (current_attempt)
+            ordered_results = sorted(
+                [res for res in batch_results if isinstance(res, tuple)],
+                key=lambda x: x[0]
+            )
+            for _, msg in ordered_results:
+                print(msg)
+            print("\n\nNext Batch Initializing...")
 
 async def main(args):
     """
