@@ -103,6 +103,7 @@ async def scan_with_adapter(adapter, interval):
     Raises:
         asyncio.CancelledError: If the scanning task is cancelled.
     """
+    print(f"[{adapter}] BLE Scan Started")
     scanner = BleakScanner(
         adapter=adapter,
         detection_callback=device_found  # Modern callback assignment
