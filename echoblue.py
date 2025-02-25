@@ -245,6 +245,7 @@ async def fuzz_uap(adapter, target_address, output_file, timeout):
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
             
             if b"bytes from" in stdout:
+                print(f"Found {target_address}. Saving to output file...")
                 async with aiofiles.open(output_file, 'a') as f:
                     await f.write(f"{target_address}\n")
                 return target_address
