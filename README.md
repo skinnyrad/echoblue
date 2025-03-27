@@ -167,6 +167,14 @@ The tool includes error handling for the following:
 - Subprocess failures or timeouts (especially when pinging devices in Classic mode)
 - Graceful termination on user interruption
 
+## Notes
+
+#### Important Notice: Avoid Running Multiple Instances Simultaneously
+
+Running multiple instances of this program has been tested and found to severely impact performance. This is particularly evident when performing tasks like UAP fuzzing while simultaneously attempting to run BLE with a reduced interval. Such configurations can lead to significant degradation in tool efficiency.
+
+Recommendation: To ensure optimal performance and reliability, it is strongly advised to run only one instance of the program at a time, especially if using the same interfaces.
+
 ## License
 
 This project is open-source and distributed under the MIT License.
