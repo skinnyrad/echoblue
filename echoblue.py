@@ -345,6 +345,12 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
                 print(msg)
             print("\n\nNext Batch Initializing...")
 
+def positive_int(value):
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is not a positive integer greater than zero")
+    return ivalue
+
 async def main(args):
     """
     Main asynchronous function to initialize and run the Bluetooth scanning process.
@@ -449,36 +455,54 @@ async def main(args):
             print("No devices from target file were seen.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Bluetooth device scanner")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-c', '--classic', action='store_true',
-                      help='Use Classic Bluetooth mode (l2ping)')
-    group.add_argument('-b', '--btle', action='store_true',
-                      help='Use BLE mode')
-    group.add_argument('-u', '--uap-fuzz', action='store_true',
-                      help='Enable UAP fuzzing mode')
+    # First stage: Parse just the mode
+    mode_parser = argparse.ArgumentParser(add_help=False)
+    mode_group = mode_parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument('-c', '--classic', action='store_true',
+                          help='Use Classic Bluetooth mode (l2ping)')
+    mode_group.add_argument('-b', '--btle', action='store_true',
+                          help='Use BLE mode')
+    mode_group.add_argument('-u', '--uap-fuzz', action='store_true',
+                          help='Enable UAP fuzzing mode')
+    mode_args, remaining_args = mode_parser.parse_known_args()
     
-    # File arguments with conditional requirements
-    parser.add_argument('-f', '--file', type=str,
-                       help='Path to file with known device addresses (required for Classic/BLE modes)')
-    parser.add_argument('-l', '--lap-file', type=str,
-                       help='Path to LAP input file (required for UAP fuzzing)')
-    parser.add_argument('-o', '--output', type=str,
-                       help='Output file for validated addresses (required for UAP fuzzing)')
+    # Second stage: Create full parser with mode-specific arguments
+    parser = argparse.ArgumentParser(description="Bluetooth device scanner", 
+                                    parents=[mode_parser])
     
-    # Remaining arguments
-    parser.add_argument('-n', '--num-packets', type=int, default=3,
-                       help='Number of l2ping packets to send (default: 3)')
-    parser.add_argument('--classic-interval', type=int, default=30,
-                       help='Scan interval in seconds (Classic mode)')
-    parser.add_argument('--ble-interval', type=int, default=30,
-                       help='Scan interval in seconds (BLE mode)')
-    parser.add_argument('--uap-timeout', type=int, default=30,
-                       help='Timeout per UAP attempt in seconds')
+    # Add common arguments
     parser.add_argument('-x', '--exclude', type=str, nargs='*', default=[],
                        help='Interface(s) to exclude (e.g., -x hci0 hci2)')
-
+    
+    # Add mode-specific arguments
+    if mode_args.uap_fuzz:
+        parser.add_argument('-l', '--lap-file', type=str, required=True,
+                           help='Path to LAP input file')
+        parser.add_argument('-o', '--output', type=str, required=True,
+                           help='Output file for validated addresses')
+        parser.add_argument('--uap-timeout', type=positive_int, default=30,
+                           help='Timeout per UAP attempt in seconds')
+    else:  # Classic/BLE modes
+        parser.add_argument('-f', '--file', type=str, required=True,
+                           help='Path to file with known device addresses')
+        
+        if mode_args.classic:
+            parser.add_argument('-n', '--num-packets', type=positive_int, default=3,
+                               help='Number of l2ping packets to send (default: 3)')
+            parser.add_argument('--classic-interval', type=positive_int, default=30,
+                               help='Scan interval in seconds (Classic mode)')
+        elif mode_args.btle:
+            parser.add_argument('--ble-interval', type=positive_int, default=30,
+                               help='Scan interval in seconds (BLE mode)')
+    
+    # Parse the full command line with mode-specific arguments
     args = parser.parse_args()
+    
+    try:
+        asyncio.run(main(args))
+    except KeyboardInterrupt:
+        print("Program interrupted. Exiting gracefully.")
+
 
     # Validate arguments based on mode
     if args.uap_fuzz:
