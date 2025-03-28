@@ -317,9 +317,20 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
     - ValueError**: If an invalid LAP format is encountered.
     """
     print("Initializing UAP Fuzz...")
-    global total_uap_attempts
+    global total_uap_attempts, uap_found_count
+    uap_found_count = 0  # Reset at the start of each run
+    newly_found_addresses = set()  # New set to track addresses found in this run
+
+    if not os.path.exists(lap_file):
+        print(f"Error: LAP file '{lap_file}' does not exist.")
+        return
+
     with open(lap_file, 'r') as f:
         laps = [line.strip() for line in f if line.strip()]
+
+    if not laps:
+        print(f"Warning: LAP file '{lap_file}' is empty. No LAPs to process.")
+        return
 
     # Filter out invalid LAPs first
     valid_laps = []
@@ -359,7 +370,17 @@ async def coordinate_fuzzing(adapters, lap_file, output_file, timeout):
             )
             for _, msg in ordered_results:
                 print(msg)
+                if "Found" in msg:
+                    address = msg.split()[2]  # Extract the found address
+                    newly_found_addresses.add(address)
             print("\n\nNext Batch Initializing...")
+
+    # After all fuzzing is complete, print only newly found addresses
+    print("\nNewly discovered valid addresses in this run:")
+    for addr in newly_found_addresses:
+        print(addr)
+    print(f"\nTotal new addresses found in this run: {len(newly_found_addresses)}")
+
 
 def positive_int(value):
     ivalue = int(value)
@@ -480,11 +501,9 @@ async def main(args):
         if args.uap_fuzz:
             if os.path.exists(args.output):
                 with open(args.output, 'r') as f:
-                    found = [line.strip() for line in f if line.strip()]
-                if found:
-                    print("Valid addresses found:")
-                    for addr in found:
-                        print(addr)
+                    all_found = [line.strip() for line in f if line.strip()]
+                if all_found:
+                    print(f"Total valid addresses found (including previous runs): {len(all_found)}")
                 else:
                     print("No valid addresses discovered")
         elif all_seen_devices:
