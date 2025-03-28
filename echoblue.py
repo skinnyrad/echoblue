@@ -12,6 +12,7 @@ import os
 import subprocess
 from bleak import BleakScanner
 import aiofiles
+import signal
 
 # Global variables for device tracking
 known_devices = set()
@@ -138,6 +139,7 @@ async def ping_device(adapter, mac, ping_count=3):
         Requires sudo privileges and the availability of the 'l2ping' command.
     """
     global all_seen_devices
+    process = None
     try:
         process = await asyncio.create_subprocess_exec(
             'sudo', 'l2ping', '-i', adapter, '-c', str(ping_count), mac,
@@ -152,8 +154,22 @@ async def ping_device(adapter, mac, ping_count=3):
             print(f"[{adapter}] Classic device inactive: {mac}")
     except asyncio.TimeoutError:
         print(f"[{adapter}] Timeout occurred while pinging {mac}")
-        process.terminate()
-    except subprocess.CalledProcessError as e:
+        if process and process.returncode is None:
+            try:
+                process.kill()  # More forceful than terminate()
+                await process.wait()  # Wait for process to be fully killed
+            except Exception:
+                pass
+    except asyncio.CancelledError:
+        # Handle cancellation gracefully
+        if process and process.returncode is None:
+            try:
+                process.kill()  # More forceful than terminate()
+                await process.wait()  # Wait for process to be fully killed
+            except Exception:
+                pass
+        raise
+    except Exception as e:
         print(f"[{adapter}] Error pinging {mac}: {str(e)}")
 
 async def classic_scan_with_adapter(adapter, devices, interval, ping_count=3):
@@ -351,6 +367,29 @@ def positive_int(value):
         raise argparse.ArgumentTypeError(f"{value} is not a positive integer greater than zero")
     return ivalue
 
+async def cleanup():
+    """Properly clean up resources before shutdown."""
+    # First, cancel all tasks
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in tasks:
+        task.cancel()
+    
+    # Wait for all tasks to complete their cancellation
+    if tasks:
+        try:
+            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5)
+        except asyncio.TimeoutError:
+            print("Some tasks didn't complete cleanup in time")
+    
+    # Kill any remaining subprocess
+    try:
+        for task in tasks:
+            if hasattr(task, 'process') and task.process and task.process.returncode is None:
+                task.process.kill()
+    except Exception:
+        pass
+
+
 async def main(args):
     """
     Main asynchronous function to initialize and run the Bluetooth scanning process.
@@ -436,6 +475,7 @@ async def main(args):
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
     finally:
+        await cleanup()
         print("Shutting down gracefully...\n\n")
         if args.uap_fuzz:
             if os.path.exists(args.output):
@@ -453,6 +493,8 @@ async def main(args):
                 print(device)
         else:
             print("No devices from target file were seen.")
+
+
 
 if __name__ == "__main__":
     # First stage: Parse just the mode
@@ -498,25 +540,6 @@ if __name__ == "__main__":
     # Parse the full command line with mode-specific arguments
     args = parser.parse_args()
     
-    try:
-        asyncio.run(main(args))
-    except KeyboardInterrupt:
-        print("Program interrupted. Exiting gracefully.")
-
-
-    # Validate arguments based on mode
-    if args.uap_fuzz:
-        if not args.lap_file:
-            print("Error: UAP fuzzing requires --lap-file")
-            exit(1)
-        if not args.output:
-            print("Error: UAP fuzzing requires --output")
-            exit(1)
-    else:  # Classic/BLE modes
-        if not args.file:
-            print("Error: Classic/BLE modes require --file")
-            exit(1)
-
     try:
         asyncio.run(main(args))
     except KeyboardInterrupt:
