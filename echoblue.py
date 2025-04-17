@@ -191,7 +191,9 @@ async def classic_scan_with_adapter(adapter, devices, interval, ping_count=3):
     try:
         while True:
             print(f"[{adapter}] Starting scan cycle for {len(devices)} devices")
-            await asyncio.gather(*[ping_device(adapter, mac, ping_count=ping_count) for mac in devices])
+            for mac in devices:
+                await ping_device(adapter, mac, ping_count=ping_count)
+                await asyncio.sleep(0.01)  # 200 ms delay between pings
             print(f"[{adapter}] Scan cycle completed, waiting {interval}s")
             await asyncio.sleep(interval)
     except asyncio.CancelledError:
