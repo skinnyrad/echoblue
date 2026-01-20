@@ -1,6 +1,6 @@
-# Blue Echo (ECHOBLUE)
+# Echo Blue
 
-Blue Echo is a Python-based Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range. The tool efficiently distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using l2ping) and BLE scanning (using the Bleak library).
+Echo Blue is a Python-based Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range. The tool efficiently distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using l2ping) and BLE scanning (using the Bleak library).
 
 ## Features
 
