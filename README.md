@@ -1,6 +1,33 @@
 # Echo Blue
 
-Echo Blue is a Python-based Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range. The tool efficiently distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using l2ping) and BLE scanning (using the Bleak library).
+Echo Blue is a Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range, for defensive monitoring of secure spaces. The tool efficiently distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using l2ping) and BLE scanning.
+
+> **Go port:** the primary implementation is now Go (`main.go`, `scan.go`, `uap.go`), producing a single static binary for Linux and Raspberry Pi. The original Python implementation is kept in `echoblue.py` as a reference — do not run both at once. See [docs/go-migration.md](docs/go-migration.md) for the migration assessment and hardware validation results.
+
+## Go version (recommended)
+
+Prerequisites: Linux with BlueZ running (`bluetoothctl power on`), `hciconfig`/`l2ping` for Classic and UAP modes, and sudo (passwordless or root) for `l2ping`. No runtime dependencies — the binary is static.
+
+Download a binary from the [Releases page](https://github.com/skinnyrad/echoblue/releases) (`linux-amd64` for PCs/servers, `linux-arm64` for 64-bit Pi OS, `linux-armv7`/`linux-armv6` for 32-bit Pi OS), or build it yourself:
+
+```bash
+go build -o echoblue .
+# Raspberry Pi cross-compile examples:
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o echoblue .
+GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -o echoblue .
+```
+
+Usage is identical to the Python version below, e.g.:
+
+```bash
+./echoblue -f devices.txt -c --classic-interval 10 --num-packets 3
+./echoblue -f devices.txt -b --ble-interval 10
+./echoblue -u -l laps.txt -o found.txt
+```
+
+Releases are built by GitHub Actions: pushing a `vX.Y.Z` tag publishes the four binaries plus `SHA256SUMS`. CI runs `gofmt`, `go vet`, `go test -race`, and cross-compiles all targets on every push/PR.
+
+## Python version (legacy reference)
 
 ## Features
 

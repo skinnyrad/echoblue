@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (linux/amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -race -count=1 ./...
+      - name: Build
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/echoblue ./
+
+  build-matrix:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux amd64
+            slug: linux-amd64
+            goos: linux
+            goarch: amd64
+            goarm: ""
+          - name: Raspberry Pi 64-bit (arm64)
+            slug: linux-arm64
+            goos: linux
+            goarch: arm64
+            goarm: ""
+          - name: Raspberry Pi 32-bit (armv7)
+            slug: linux-armv7
+            goos: linux
+            goarch: arm
+            goarm: "7"
+          - name: Raspberry Pi Zero/1 (armv6)
+            slug: linux-armv6
+            goos: linux
+            goarch: arm
+            goarm: "6"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cross-compile
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags "-s -w" -o echoblue-${{ matrix.slug }} ./
+      - uses: actions/upload-artifact@v4
+        with:
+          name: echoblue-${{ matrix.slug }}
+          path: echoblue-${{ matrix.slug }}
+          if-no-files-found: error
