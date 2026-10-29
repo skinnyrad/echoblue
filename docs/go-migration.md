@@ -63,6 +63,45 @@ into idle, so the port must be held open while scanning).
   (No hit expected: the reference device's NAP is not `00:00`.)
 - ESP32 returned to idle afterwards: `mode wifi=0 ble=0`.
 
+## Second-adapter + synthetic 00:00-NAP target validation
+
+A Sena UD100 (CSR, `0a12:0001`) was attached as `hci1`
+(`00:01:95:C7:18:C5`) alongside the onboard Intel `hci0`:
+
+- BLE scan via the UD100 alone (`-x hci0`) found the ESP32 advertiser;
+  both adapters scanning simultaneously also worked.
+- Classic scan via the UD100 alone (`-x hci0`) alerted on the in-range
+  BR/EDR device every cycle.
+
+Real `00:00`-NAP devices are rare (the NAP is the top two octets of the
+burned-in BD_ADDR), so the target was synthesised: the ESP32 was flashed
+with a Classic (BluetoothSerial) sketch that calls
+`esp_base_mac_addr_set()` before BT init, giving it BD_ADDR
+`00:00:2A:11:22:35` (NAP `00:00`, UAP `0x2A`, LAP `11:22:35`). It was
+found by Classic inquiry from both adapters. Results:
+
+- **Classic (Go, via UD100)** against `00:00:2A:11:22:35`: active +
+  alert. One cycle in several reported inactive — the ESP32 target
+  occasionally misses a page; the scanner is behaving correctly.
+- **UAP (Go)**: fuzzing LAP `11:22:35` found `00:00:2a:11:22:35` and
+  wrote it to the output file. Absent candidates cost one BlueZ page
+  timeout (~5 s) each and page attempts serialise per adapter, so a
+  full 256-candidate sweep takes ~10 min on two adapters / ~20 min on
+  one. This matches the Python design's cost; `--uap-timeout` does not
+  shorten the hardware page timeout.
+- The ESP32 was reflashed with its original traffic sketch afterwards
+  (it needs `PartitionScheme=huge_app`).
+
+To reproduce the `00:00`-NAP test you need: (1) a BR/EDR target whose
+BD_ADDR starts `00:00` — either a device that happens to have one, a
+CSR dongle with a rewritten BD_ADDR, or a dev board (ESP32) with a
+software-set base MAC running a Classic BT profile; (2) the target
+powered and in range of a scanning adapter it is *not* plugged into;
+(3) passwordless sudo/root for `l2ping`; (4) only the target's LAP in
+the LAP file, with the UAP deliberately withheld; (5) ~10–20 min for
+the sweep, or check the output file incrementally — hits are appended
+as soon as they answer.
+
 ## Releases
 
 Tag `vX.Y.Z` and push: the Release workflow tests, cross-compiles, and

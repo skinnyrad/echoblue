@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"tinygo.org/x/bluetooth"
@@ -26,6 +27,17 @@ func defaultPinger(ctx context.Context, adapter, mac string, count int) (string,
 	} else {
 		cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 	}
+	// Kill the whole process group on timeout/cancel: killing sudo alone
+	// would orphan l2ping, which keeps the output pipe open and blocks
+	// the caller until it gives up on its own.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.Output()
 	return string(out), err
 }
