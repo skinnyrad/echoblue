@@ -26,6 +26,10 @@ jobs:
       - name: Test
         run: go test -race -count=1 ./...
       - name: Vulnerability check
+        env:
+          # govulncheck@latest may require a newer Go than go.mod pins;
+          # allow the toolchain download for this step only.
+          GOTOOLCHAIN: auto
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
