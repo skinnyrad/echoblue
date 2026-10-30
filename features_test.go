@@ -170,3 +170,19 @@ func TestPingDeviceResult(t *testing.T) {
 		t.Fatal("expected inactive")
 	}
 }
+
+func TestWaitScanDone(t *testing.T) {
+	done := make(chan error, 1)
+	done <- nil
+	if !waitScanDone(done, time.Second) {
+		t.Fatal("finished scan should report true")
+	}
+	never := make(chan error)
+	start := time.Now()
+	if waitScanDone(never, 30*time.Millisecond) {
+		t.Fatal("wedged scan should report false on timeout")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("wait was not bounded: %s", elapsed)
+	}
+}

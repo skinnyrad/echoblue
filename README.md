@@ -20,7 +20,7 @@ See [docs/go-migration.md](docs/go-migration.md) for the migration assessment an
 - Bluetooth adapter(s) supporting Classic Bluetooth or BLE
 - `hciconfig` and `l2ping` (BlueZ tools) for adapter detection and Classic/UAP modes
 - Sudo privileges (passwordless, or run as root) for Classic mode (running `l2ping`)
-- To build from source: Go 1.23 or newer. The released binary has no runtime dependencies.
+- To build from source: Go 1.25 or newer. The released binary has no runtime dependencies.
 
 ## Installation
 

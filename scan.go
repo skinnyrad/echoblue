@@ -157,6 +157,43 @@ func handleAdvertisement(wl *watchlist, tr *tracker, discover bool, cycleSeen ma
 // discovery mode an address is re-reported at most once per interval.
 var bleScanMu sync.Mutex
 
+// scanStopTimeout bounds how long shutdown (or adapter rotation) waits
+// for a scan to actually stop. BlueZ/TinyGo can wedge with discovery
+// stuck on an adapter; waiting forever would hang process exit, which
+// is exactly what left test shells (and would leave systemd stops)
+// hanging. On timeout we log and carry on — at process exit the leaked
+// scan goroutine dies with the process.
+const scanStopTimeout = 5 * time.Second
+
+// waitScanDone waits for a scan goroutine to finish, bounded by timeout.
+// It reports whether the scan finished in time.
+func waitScanDone(done <-chan error, timeout time.Duration) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+// stopScanBounded asks the adapter to stop scanning and waits, bounded.
+// StopScan is retried while waiting: it is a no-op if the scan goroutine
+// has not registered its cancel channel yet, which is exactly the race
+// that otherwise leaves discovery running.
+func stopScanBounded(adapter *bluetooth.Adapter, adapterName string, done <-chan error) {
+	deadline := time.Now().Add(scanStopTimeout)
+	for {
+		_ = adapter.StopScan()
+		if waitScanDone(done, 500*time.Millisecond) {
+			return
+		}
+		if time.Now().After(deadline) {
+			logf("[%s] BLE scan did not stop within %s; continuing anyway", adapterName, scanStopTimeout)
+			return
+		}
+	}
+}
+
 func scanBLE(ctx context.Context, adapterName string, idx, numAdapters int, interval time.Duration, wl *watchlist, tr *tracker, discover bool) error {
 	adapter := bluetooth.NewAdapter(adapterName)
 	if err := adapter.Enable(); err != nil {
@@ -202,8 +239,7 @@ func scanBLE(ctx context.Context, adapterName string, idx, numAdapters int, inte
 		if numAdapters <= 1 {
 			select {
 			case <-ctx.Done():
-				_ = adapter.StopScan()
-				<-scanDone
+				stopScanBounded(adapter, adapterName, scanDone)
 				bleScanMu.Unlock()
 				return nil
 			case err := <-scanDone:
@@ -216,13 +252,11 @@ func scanBLE(ctx context.Context, adapterName string, idx, numAdapters int, inte
 		} else {
 			select {
 			case <-ctx.Done():
-				_ = adapter.StopScan()
-				<-scanDone
+				stopScanBounded(adapter, adapterName, scanDone)
 				bleScanMu.Unlock()
 				return nil
 			case <-time.After(interval):
-				_ = adapter.StopScan()
-				<-scanDone
+				stopScanBounded(adapter, adapterName, scanDone)
 				bleScanMu.Unlock()
 			case err := <-scanDone:
 				bleScanMu.Unlock()
