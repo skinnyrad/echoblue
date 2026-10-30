@@ -101,7 +101,10 @@ func run(ctx context.Context, cfg config) error {
 			break
 		}
 		wg.Add(1)
-		go sweepLoop(ctx, tr, 2*time.Duration(cfg.classicInterval)*time.Second+pingTimeout)
+		go func() {
+			defer wg.Done()
+			sweepLoop(ctx, tr, 2*time.Duration(cfg.classicInterval)*time.Second+pingTimeout)
+		}()
 		for i, adapter := range adapters {
 			wg.Add(1)
 			go func(adapter string, idx int) {
@@ -112,7 +115,10 @@ func run(ctx context.Context, cfg config) error {
 	case "ble":
 		if !cfg.discover {
 			wg.Add(1)
-			go sweepLoop(ctx, tr, time.Duration(len(adapters))*2*time.Duration(cfg.bleInterval)*time.Second+5*time.Second)
+			go func() {
+				defer wg.Done()
+				sweepLoop(ctx, tr, time.Duration(len(adapters))*2*time.Duration(cfg.bleInterval)*time.Second+5*time.Second)
+			}()
 		}
 		for i, adapter := range adapters {
 			wg.Add(1)
