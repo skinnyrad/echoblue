@@ -11,8 +11,13 @@ import (
 )
 
 // generateUAPCombinations returns all 256 candidate BD_ADDRs for a LAP:
-// 00:00:<UAP>:<LAP>, UAP from 00 to FF.
-func generateUAPCombinations(lap string) ([]string, error) {
+// <NAP>:<UAP>:<LAP>, UAP from 00 to FF, NAP defaulting to 00:00.
+func generateUAPCombinations(lap, nap string) ([]string, error) {
+	nap, err := parseNAP(nap)
+	if err != nil {
+		return nil, err
+	}
+	napParts := strings.Split(nap, ":")
 	normalized := strings.ToLower(strings.ReplaceAll(lap, ":", ""))
 	if len(normalized) != 6 {
 		return nil, fmt.Errorf("invalid LAP format: %s", normalized)
@@ -24,7 +29,7 @@ func generateUAPCombinations(lap string) ([]string, error) {
 	}
 	out := make([]string, 0, 256)
 	for uap := 0; uap <= 0xFF; uap++ {
-		out = append(out, fmt.Sprintf("00:00:%02x:%s:%s:%s", uap, normalized[0:2], normalized[2:4], normalized[4:6]))
+		out = append(out, fmt.Sprintf("%s:%s:%02x:%s:%s:%s", napParts[0], napParts[1], uap, normalized[0:2], normalized[2:4], normalized[4:6]))
 	}
 	return out, nil
 }
@@ -46,15 +51,21 @@ type fuzzResult struct {
 // coordinateFuzzing brute-forces the UAP for every LAP in lapFile,
 // distributing batches of 4-per-adapter across adapters,
 // printing each batch's results in attempt order.
-func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFile string, timeoutSec int, ping pinger) {
-	fmt.Println("Initializing UAP Fuzz...")
-	laps, err := loadLines(lapFile)
+func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFile, nap string, timeoutSec int, ping pinger) {
+	logf("Initializing UAP Fuzz...")
+	rawLines, err := readLines(lapFile)
+	var laps []string
+	for _, l := range rawLines {
+		if s := strings.TrimSpace(l); s != "" {
+			laps = append(laps, s)
+		}
+	}
 	if err != nil {
-		fmt.Printf("Error: LAP file '%s' does not exist.\n", lapFile)
+		logf("Error: LAP file '%s' does not exist.", lapFile)
 		return
 	}
 	if len(laps) == 0 {
-		fmt.Printf("Warning: LAP file '%s' is empty. No LAPs to process.\n", lapFile)
+		logf("Warning: LAP file '%s' is empty. No LAPs to process.", lapFile)
 		return
 	}
 	type lapWork struct {
@@ -63,9 +74,9 @@ func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFi
 	}
 	var works []lapWork
 	for _, lap := range laps {
-		addrs, err := generateUAPCombinations(lap)
+		addrs, err := generateUAPCombinations(lap, nap)
 		if err != nil {
-			fmt.Printf("Skipping invalid LAP: %s - %s\n", lap, err)
+			logf("Skipping invalid LAP: %s - %s", lap, err)
 			continue
 		}
 		works = append(works, lapWork{lap, addrs})
@@ -90,7 +101,7 @@ func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFi
 		seq := st.attempts
 		st.mu.Unlock()
 		attemptCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-		stdout, _ := ping(attemptCtx, adapter, target, 3)
+		stdout, _ := ping(attemptCtx, adapter, target, 1)
 		cancel()
 		if ctx.Err() != nil {
 			return fuzzResult{seq: seq}
@@ -136,25 +147,23 @@ func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFi
 				if r.msg == "" {
 					continue
 				}
-				fmt.Println(r.msg)
+				logf("%s", r.msg)
 				if r.found != "" {
 					st.mu.Lock()
 					st.foundSet[r.found] = struct{}{}
 					st.mu.Unlock()
 				}
 			}
-			fmt.Println()
-			fmt.Println("Next Batch Initializing...")
+			logf("Next Batch Initializing...")
 		}
 	}
 
-	fmt.Println()
-	fmt.Println("Newly discovered valid addresses in this run:")
+	logf("Newly discovered valid addresses in this run:")
 	st.mu.Lock()
 	n := len(st.foundSet)
 	for addr := range st.foundSet {
-		fmt.Println(addr)
+		logf("%s", addr)
 	}
 	st.mu.Unlock()
-	fmt.Printf("\nTotal new addresses found in this run: %d\n", n)
+	logf("Total new addresses found in this run: %d", n)
 }

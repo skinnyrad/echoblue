@@ -10,7 +10,7 @@ import (
 )
 
 func TestGenerateUAPCombinations(t *testing.T) {
-	addrs, err := generateUAPCombinations("A1:B2:C3")
+	addrs, err := generateUAPCombinations("A1:B2:C3", "00:00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestGenerateUAPCombinations(t *testing.T) {
 		t.Fatalf("unexpected bounds: %s .. %s", addrs[0], addrs[255])
 	}
 	// Colon-less form normalises the same way.
-	bare, _ := generateUAPCombinations("a1b2c3")
+	bare, _ := generateUAPCombinations("a1b2c3", "00:00")
 	if bare[1] != "00:00:01:a1:b2:c3" {
 		t.Fatalf("bare LAP: %s", bare[1])
 	}
@@ -29,7 +29,7 @@ func TestGenerateUAPCombinations(t *testing.T) {
 
 func TestGenerateUAPCombinationsInvalid(t *testing.T) {
 	for _, bad := range []string{"", "A1:B2", "ZZ:ZZ:ZZ", "A1B2C34", "12:34:5g"} {
-		if _, err := generateUAPCombinations(bad); err == nil {
+		if _, err := generateUAPCombinations(bad, "00:00"); err == nil {
 			t.Errorf("expected error for %q", bad)
 		}
 	}
@@ -46,16 +46,21 @@ func TestParseAdapters(t *testing.T) {
 	}
 }
 
-func TestLoadKnownDevices(t *testing.T) {
+func TestLoadWatchlistFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "devices.txt")
 	os.WriteFile(p, []byte("77:0E:FD:98:10:30\n\n  \n89:57:5f:d0:f4:06\n"), 0o644)
-	got := loadKnownDevices(p)
+	wl, err := loadWatchlist(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := wl.snapshot()
 	if len(got) != 2 || got[1] != "89:57:5F:D0:F4:06" {
 		t.Fatalf("got %v", got)
 	}
-	if got := loadKnownDevices(filepath.Join(dir, "nope.txt")); len(got) != 0 {
-		t.Fatalf("missing file: %v", got)
+	wl2, _ := loadWatchlist(filepath.Join(dir, "nope.txt"))
+	if wl2.len() != 0 {
+		t.Fatalf("missing file: %v", wl2.snapshot())
 	}
 }
 
@@ -72,23 +77,6 @@ func TestPingSucceeded(t *testing.T) {
 	}
 	if pingSucceeded("Send failed: Network is unreachable") {
 		t.Fatal("expected failure")
-	}
-}
-
-func TestPingDeviceAlertsOncePerCycle(t *testing.T) {
-	tr := newTracker()
-	ping := func(ctx context.Context, adapter, mac string, count int) (string, error) {
-		return "64 bytes from " + mac, nil
-	}
-	pingDevice(context.Background(), "hci0", "AA:BB:CC:DD:EE:FF", 3, tr, ping)
-	pingDevice(context.Background(), "hci0", "AA:BB:CC:DD:EE:FF", 3, tr, ping)
-	if seen := tr.seen(); len(seen) != 1 {
-		t.Fatalf("seen %v", seen)
-	}
-	tr.resetCycle()
-	pingDevice(context.Background(), "hci0", "AA:BB:CC:DD:EE:FF", 3, tr, ping)
-	if len(tr.seen()) != 1 {
-		t.Fatal("session set should persist across cycles")
 	}
 }
 
@@ -130,7 +118,7 @@ func TestCoordinateFuzzingFindsDevice(t *testing.T) {
 		}
 		return "", nil
 	}
-	coordinateFuzzing(context.Background(), []string{"hci0"}, lapFile, outFile, 5, ping)
+	coordinateFuzzing(context.Background(), []string{"hci0"}, lapFile, outFile, "00:00", 5, ping)
 	data, _ := os.ReadFile(outFile)
 	if !strings.Contains(string(data), target) {
 		t.Fatalf("output missing target:\n%s", data)

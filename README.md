@@ -1,6 +1,6 @@
 # Echo Blue
 
-Echo Blue is a Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range, for defensive monitoring of secure spaces. It distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using `l2ping`) and BLE scanning (BlueZ over D-Bus). It is written in Go and ships as a single static binary for Linux and Raspberry Pi.
+Echo Blue is a Bluetooth device scanner that monitors for specific devices and sends alerts when they come into range. It distributes scanning workloads across available Bluetooth adapters, supporting both Classic Bluetooth (using `l2ping`) and BLE scanning (BlueZ over D-Bus). It is written in Go and ships as a single static binary for Linux and Raspberry Pi.
 
 See [docs/go-migration.md](docs/go-migration.md) for the migration assessment and hardware validation results.
 
@@ -59,7 +59,27 @@ YY:YY:YY:YY:YY:YY
 ./echoblue -f devices.txt -c --classic-interval 10 --num-packets 3
 ./echoblue -f devices.txt -b --ble-interval 10
 ./echoblue -u -l laps.txt -o found.txt
+./echoblue --version
 ```
+
+Discovery mode (no watchlist file) reports everything nearby:
+
+```bash
+./echoblue -b -d                     # BLE: every advertiser, once per cycle
+./echoblue -c -d                     # Classic: inquiry, discoverable devices only
+```
+
+Sample watchlist/LAP files are in [examples/](examples/). The watchlist is
+reloaded automatically when the file changes, so devices can be added
+without restarting. Alerts fire once when a device arrives; a departure
+is logged after the device has been unseen for about two scan intervals.
+
+Common options:
+
+- `--log-file <path>`: also append timestamped output to a file
+- `--alert-hook '<command>'`: run a shell command on arrival, with
+  `ECHOBLUE_ADDRESS`, `ECHOBLUE_NAME` and `ECHOBLUE_ADAPTER` in the
+  environment, e.g. `--alert-hook 'echo $ECHOBLUE_ADDRESS >> /var/log/arrivals.log'`
 
 Exactly one mode is required:
 
@@ -126,6 +146,7 @@ Note: candidates with no device behind them each cost one BlueZ page timeout (~5
 - **`-l` / `--lap-file`**: input file containing the list of LAP values (e.g., `laps.txt`).
 - **`-o` / `--output`**: output file where discovered, valid Bluetooth addresses (with the correct UAP) are saved (e.g., `found.txt`).
 - **`--uap-timeout`**: (optional) timeout (in seconds) for each `l2ping` attempt (default: 30).
+- **`--nap`**: (optional) the NAP to prepend, two octets (default: `00:00`). Set this when the target's NAP is known to be something else.
 - **`-x` / `--exclude`**: (optional) exclude specific Bluetooth interface adapters from the fuzzing process.
 
 ### Usage Example
@@ -160,7 +181,33 @@ go vet ./...
 go test ./...        # unit tests; hardware modes are covered by manual tests
 ```
 
-Releases are built by GitHub Actions: pushing a `vX.Y.Z` tag publishes the four binaries plus `SHA256SUMS` to the Releases page. CI runs `gofmt`, `go vet`, `go test -race`, and cross-compiles all targets on every push/PR.
+Releases are built by GitHub Actions: pushing a `vX.Y.Z` tag publishes the four binaries plus `SHA256SUMS` to the Releases page. CI runs `gofmt`, `go vet`, `go test -race`, `govulncheck`, and cross-compiles all targets on every push/PR.
+
+### Creating a release
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That triggers the Release workflow (Actions tab); when it finishes, the
+binaries appear under Releases in the repository sidebar. To build them
+without publishing, run the Release workflow manually from the Actions
+tab (workflow_dispatch).
+
+### Running as a service
+
+An example systemd unit is in [deploy/echoblue.service](deploy/echoblue.service).
+It runs unprivileged with `CAP_NET_RAW` (via `AmbientCapabilities`), which
+is what `l2ping` needs — no root or passwordless sudo required. The same
+capability can be granted to the binary directly:
+
+```bash
+sudo setcap cap_net_raw+ep ./echoblue
+```
+
+When neither root nor the capability is present, the tool falls back to
+`sudo -n l2ping` (passwordless sudo).
 
 ## License
 

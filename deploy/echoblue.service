@@ -1,0 +1,25 @@
+[Unit]
+Description=Echo Blue Bluetooth device scanner
+After=bluetooth.service network.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+# Adjust the user, paths and mode/arguments to your setup.
+User=echoblue
+ExecStartPre=/usr/bin/bluetoothctl power on
+ExecStart=/usr/local/bin/echoblue -b -f /etc/echoblue/devices.txt --ble-interval 10 --log-file /var/log/echoblue.log
+Restart=on-failure
+RestartSec=10
+
+# Grant the raw-socket capability l2ping needs (Classic/UAP modes)
+# without running as root or needing passwordless sudo.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/log
+
+[Install]
+WantedBy=multi-user.target

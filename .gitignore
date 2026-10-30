@@ -6,3 +6,5 @@ dist/
 
 # Local device/LAP lists and results
 found.txt
+/devices.txt
+/laps.txt
