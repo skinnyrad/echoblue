@@ -11,7 +11,7 @@ import (
 )
 
 // generateUAPCombinations returns all 256 candidate BD_ADDRs for a LAP:
-// 00:00:<UAP>:<LAP>, UAP from 00 to FF (Python generate_uap_combinations).
+// 00:00:<UAP>:<LAP>, UAP from 00 to FF.
 func generateUAPCombinations(lap string) ([]string, error) {
 	normalized := strings.ToLower(strings.ReplaceAll(lap, ":", ""))
 	if len(normalized) != 6 {
@@ -44,7 +44,7 @@ type fuzzResult struct {
 }
 
 // coordinateFuzzing brute-forces the UAP for every LAP in lapFile,
-// distributing batches of 4-per-adapter across adapters (Python behaviour),
+// distributing batches of 4-per-adapter across adapters,
 // printing each batch's results in attempt order.
 func coordinateFuzzing(ctx context.Context, adapters []string, lapFile, outputFile string, timeoutSec int, ping pinger) {
 	fmt.Println("Initializing UAP Fuzz...")

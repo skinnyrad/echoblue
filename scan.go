@@ -15,7 +15,7 @@ import (
 // so tests can substitute a fake without Bluetooth hardware or sudo.
 type pinger func(ctx context.Context, adapter, mac string, count int) (string, error)
 
-const pingTimeout = 30 * time.Second // as in the Python ping_device
+const pingTimeout = 30 * time.Second // per-attempt cap for Classic pings
 
 func defaultPinger(ctx context.Context, adapter, mac string, count int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pingTimeout)
@@ -51,8 +51,8 @@ func pingDevice(ctx context.Context, adapter, mac string, count int, tr *tracker
 		return // shutting down
 	}
 	if err != nil && stdout == "" {
-		// l2ping exits non-zero / times out for absent devices; the Python
-		// version decides purely on stdout, so fall through to the check.
+		// l2ping exits non-zero / times out for absent devices; success is
+		// decided purely on stdout, so fall through to the check.
 		_ = err
 	}
 	if pingSucceeded(stdout) {
@@ -76,7 +76,7 @@ func classicScan(ctx context.Context, adapter string, devices []string, interval
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(10 * time.Millisecond): // Python: 0.01s between pings
+			case <-time.After(10 * time.Millisecond): // brief pause between pings
 			}
 		}
 		fmt.Printf("[%s] Scan cycle completed, waiting %s\n", adapter, interval)
@@ -90,9 +90,8 @@ func classicScan(ctx context.Context, adapter string, devices []string, interval
 
 // scanBLE scans one adapter with BlueZ (via tinygo.org/x/bluetooth, which
 // talks to BlueZ over D-Bus). The scan restarts every interval so the
-// per-cycle dedup set resets, exactly as the Python Bleak version does.
-// NewAdapter(id) is what preserves the per-hci behaviour: the Python code
-// starts one BleakScanner per adapter, so we start one Go adapter per hci.
+// per-cycle dedup set resets. NewAdapter(id) provides one scanner per
+// hci adapter.
 func scanBLE(ctx context.Context, adapterName string, interval time.Duration, known map[string]struct{}, tr *tracker) error {
 	adapter := bluetooth.NewAdapter(adapterName)
 	if err := adapter.Enable(); err != nil {

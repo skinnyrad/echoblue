@@ -1,10 +1,10 @@
 # Go migration assessment
 
 Verdict: **feasible, and the Go port is implemented.** Every feature of
-[echoblue.py](../echoblue.py) maps to Go on Linux with no feature loss.
-The Python file is kept as the reference implementation until the Go
-binary has soaked on real deployments; do not run both at once (the
-README already warns multiple instances degrade scanning).
+the original Python implementation maps to Go on Linux with no feature
+loss. The Python implementation has since been removed; the Go binary is
+the only implementation. (Do not run multiple instances at once — the
+README warns this degrades scanning.)
 
 ## Feature mapping
 
@@ -41,7 +41,7 @@ README already warns multiple instances degrade scanning).
 4. **BLE needs D-Bus/BlueZ running** and the adapter powered on
    (`bluetoothctl power on`). TinyGo does not power on the adapter.
 5. Cross-compiled Pi binaries are compile-verified only; run the
-   hardware checklist below on an actual Pi before retiring Python there.
+   hardware checklist below on an actual Pi before deploying there.
 
 ## Hardware validation (this machine, 2026-10-29)
 

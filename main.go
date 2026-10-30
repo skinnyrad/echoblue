@@ -23,7 +23,7 @@ import (
 )
 
 // tracker records devices seen this cycle and for the whole session.
-// It mirrors discovered_devices / all_seen_devices in the Python version.
+// A cycle entry is cleared each scan interval; the session set is not.
 type tracker struct {
 	mu      sync.Mutex
 	cycle   map[string]struct{}
@@ -65,13 +65,13 @@ func (t *tracker) seen() []string {
 
 func normalizeMAC(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
-// sendAlert is the customisation point, as in the Python version.
+// sendAlert is the customisation point for alert delivery.
 func sendAlert(address, name string) {
 	fmt.Printf("Alert: Device %s (%s) is in range!\n", name, address)
 }
 
 // loadKnownDevices reads one MAC per line; blank lines are ignored.
-// A missing file yields an empty list (Python behaviour).
+// A missing file yields an empty list.
 func loadKnownDevices(path string) []string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -104,7 +104,7 @@ func loadLines(path string) ([]string, error) {
 }
 
 // parseAdapters extracts adapter names from hciconfig output.
-// Python rule: a non-indented line containing a tab, name before ':'.
+// Rule: a non-indented line containing a tab, name before ':'.
 func parseAdapters(hciconfigOutput string) []string {
 	var out []string
 	for _, line := range strings.Split(hciconfigOutput, "\n") {
@@ -172,7 +172,7 @@ func filterAdapters(adapters, exclude []string) []string {
 	return out
 }
 
-// distribute splits devices round-robin across adapters (Python behaviour).
+// distribute splits devices round-robin across adapters.
 func distribute(devices []string, n int) [][]string {
 	buckets := make([][]string, n)
 	for i, mac := range devices {
@@ -420,7 +420,7 @@ func run(ctx context.Context, cfg config) error {
 		<-done
 	}
 
-	// Summary, as in the Python finally block.
+	// Session summary on shutdown.
 	fmt.Println("Shutting down gracefully...")
 	fmt.Println()
 	if cfg.mode == "uap" {
