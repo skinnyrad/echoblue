@@ -1,6 +1,6 @@
 module github.com/skinnyrad/echoblue
 
-go 1.23.0
+go 1.25.0
 
 require tinygo.org/x/bluetooth v0.14.0
 
